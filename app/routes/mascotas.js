@@ -38,12 +38,20 @@ router.post('/', upload.single('foto'), async (req, res) => {
 
   let foto_url = null;
   if (req.file) {
+    console.log("📸 Archivo recibido:", req.file.path);
     try {
-      const result = await cloudinary.uploader.upload(req.file.path);
-      foto_url = result.secure_url;
-      fs.unlinkSync(req.file.path); // elimina archivo temporal
+      if (fs.existsSync(req.file.path)) {
+        const result = await cloudinary.uploader.upload(req.file.path);
+        foto_url = result.secure_url;
+        fs.unlinkSync(req.file.path);
+        console.log("✅ Imagen subida a Cloudinary:", foto_url);
+      } else {
+        console.error("❌ Archivo no encontrado:", req.file.path);
+        return res.status(500).json({ error: 'Archivo temporal no encontrado' });
+      }
     } catch (err) {
-      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary' });
+      console.error("❌ Error Cloudinary:", err.message);
+      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary', detalle: err.message });
     }
   }
 
@@ -65,12 +73,20 @@ router.put('/:id', upload.single('foto'), async (req, res) => {
 
   let foto_url = req.body.foto_url || null;
   if (req.file) {
+    console.log("📸 Archivo recibido para actualización:", req.file.path);
     try {
-      const result = await cloudinary.uploader.upload(req.file.path);
-      foto_url = result.secure_url;
-      fs.unlinkSync(req.file.path);
+      if (fs.existsSync(req.file.path)) {
+        const result = await cloudinary.uploader.upload(req.file.path);
+        foto_url = result.secure_url;
+        fs.unlinkSync(req.file.path);
+        console.log("✅ Imagen actualizada en Cloudinary:", foto_url);
+      } else {
+        console.error("❌ Archivo no encontrado:", req.file.path);
+        return res.status(500).json({ error: 'Archivo temporal no encontrado' });
+      }
     } catch (err) {
-      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary' });
+      console.error("❌ Error Cloudinary:", err.message);
+      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary', detalle: err.message });
     }
   }
 
