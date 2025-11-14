@@ -15,7 +15,10 @@ const authRouter = require('./app/routes/auth');
 const app = express();
 
 app.use(cors());
+
+// ⚠️ Solo parsear JSON en rutas que lo necesiten
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Configuración de Multer para subida de imágenes
 const storage = multer.diskStorage({
@@ -59,7 +62,8 @@ app.post('/upload', upload.single('imagen'), (req, res) => {
   }
   res.json({
     message: 'Imagen subida correctamente',
-    file: req.file
+    file: req.file,
+    url: `/uploads/${req.file.filename}` // devolver URL accesible
   });
 });
 
