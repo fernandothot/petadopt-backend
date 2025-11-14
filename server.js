@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
+const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 
 const { authenticateToken, authorizeRole } = require('./app/middleware/auth');
 
@@ -15,19 +17,20 @@ const authRouter = require('./app/routes/auth');
 const app = express();
 
 app.use(cors());
-
-// ⚠️ Solo parsear JSON en rutas que lo necesiten
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configuración de Multer para subida de imágenes
+// Configuración de Cloudinary con variables de entorno
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_KEY,
+  api_secret: process.env.CLOUD_SECRET
+});
+
+// Configuración de Multer para guardar temporalmente
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Carpeta local (no persistente en Render)
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  destination: (req, file, cb) => cb(null, 'temp/'),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
@@ -55,20 +58,24 @@ app.delete('/admin/usuarios/:id', authenticateToken, authorizeRole('admin'), (re
   });
 });
 
-// Nueva ruta para subir imágenes
-app.post('/upload', upload.single('imagen'), (req, res) => {
+// Nueva ruta para subir imágenes (Cloudinary)
+app.post('/upload', upload.single('imagen'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No se envió ninguna imagen' });
   }
-  res.json({
-    message: 'Imagen subida correctamente',
-    file: req.file,
-    url: `/uploads/${req.file.filename}` // devolver URL accesible
-  });
-});
 
-// Servir archivos estáticos de la carpeta uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  try {
+    const result = await cloudinary.uploader.upload(req.file.path);
+    fs.unlinkSync(req.file.path); // elimina archivo temporal
+
+    res.json({
+      message: 'Imagen subida correctamente',
+      url: result.secure_url // URL pública de Cloudinary
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error subiendo imagen a Cloudinary' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
