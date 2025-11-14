@@ -3,15 +3,20 @@ const router = express.Router();
 const db = require('../db');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 
-// Configuración de Multer para subir imágenes
+// Configuración de Cloudinary con variables de entorno
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_KEY,
+  api_secret: process.env.CLOUD_SECRET
+});
+
+// Configuración de Multer para guardar temporalmente
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Carpeta local (no persistente en Render)
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  destination: (req, file, cb) => cb(null, 'temp/'),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
@@ -23,16 +28,24 @@ router.get('/', (req, res) => {
   });
 });
 
-// Crear mascota con foto (opcional)
-router.post('/', upload.single('foto'), (req, res) => {
+// Crear mascota con foto (subida a Cloudinary)
+router.post('/', upload.single('foto'), async (req, res) => {
   const { nombre, especie, raza, edad, tamano, sexo, estado_salud } = req.body;
 
-  // Validación: nombre obligatorio
   if (!nombre || nombre.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre es obligatorio' });
   }
 
-  const foto_url = req.file ? `/uploads/${req.file.filename}` : null;
+  let foto_url = null;
+  if (req.file) {
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path);
+      foto_url = result.secure_url;
+      fs.unlinkSync(req.file.path); // elimina archivo temporal
+    } catch (err) {
+      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary' });
+    }
+  }
 
   const sql = `INSERT INTO mascota (nombre, especie, raza, edad, tamano, sexo, estado_salud, foto_url) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
@@ -43,15 +56,23 @@ router.post('/', upload.single('foto'), (req, res) => {
 });
 
 // Actualizar mascota (con nueva foto opcional)
-router.put('/:id', upload.single('foto'), (req, res) => {
+router.put('/:id', upload.single('foto'), async (req, res) => {
   const { nombre, especie, raza, edad, tamano, sexo, estado_salud } = req.body;
 
-  // Validación: nombre obligatorio
   if (!nombre || nombre.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre es obligatorio' });
   }
 
-  const foto_url = req.file ? `/uploads/${req.file.filename}` : req.body.foto_url;
+  let foto_url = req.body.foto_url || null;
+  if (req.file) {
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path);
+      foto_url = result.secure_url;
+      fs.unlinkSync(req.file.path);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error subiendo imagen a Cloudinary' });
+    }
+  }
 
   const sql = `UPDATE mascota 
                SET nombre=?, especie=?, raza=?, edad=?, tamano=?, sexo=?, estado_salud=?, foto_url=? 
